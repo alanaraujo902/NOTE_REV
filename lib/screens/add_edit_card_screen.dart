@@ -1,22 +1,11 @@
-// lib/screens/add_edit_card_screen.dart
 import 'dart:convert';
+import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import '../models/card_model.dart';
 import '../database/database_helper.dart';
 import '../services/image_service.dart';
-
-// Model simples para traço — você pode aprimorar (cor, espessura, tempo...)
-class Stroke {
-  final List<Offset> points;
-  Stroke(this.points);
-  Map<String, dynamic> toMap() => {
-    'points': points.map((p) => {'x': p.dx, 'y': p.dy}).toList(),
-  };
-  factory Stroke.fromMap(Map<String, dynamic> m) =>
-      Stroke((m['points'] as List).map((p) => Offset(p['x'], p['y'])).toList());
-}
 
 class AddEditCardScreen extends StatefulWidget {
   final CardModel? card;
@@ -32,7 +21,6 @@ class _AddEditCardScreenState extends State<AddEditCardScreen> {
   bool _isDrawing = false;
   final List<Stroke> _strokes = [];
   List<Offset> _currentStroke = [];
-
   final DatabaseHelper _db = DatabaseHelper();
   final ImageService _img = ImageService();
 
@@ -52,6 +40,22 @@ class _AddEditCardScreenState extends State<AddEditCardScreen> {
 
   void _toggleDrawing() {
     setState(() => _isDrawing = !_isDrawing);
+  }
+
+  Future<void> _insertImageTag() async {
+    final imagePath = await _img.pickImage();
+    if (imagePath != null) {
+      final cursorPos = _contentController.selection.baseOffset;
+      final tag = '\n[IMAGE:$imagePath]\n';
+      final text = _contentController.text;
+      final idx = cursorPos >= 0 ? cursorPos : text.length;
+      final newText = text.replaceRange(idx, idx, tag);
+      _contentController.text = newText;
+      _contentController.selection = TextSelection.collapsed(
+        offset: idx + tag.length,
+      );
+      setState(() {}); // Redesenhar preview
+    }
   }
 
   final GlobalKey _previewKey = GlobalKey();
@@ -74,15 +78,13 @@ class _AddEditCardScreenState extends State<AddEditCardScreen> {
   Future<void> _saveCard() async {
     final now = DateTime.now();
     final drawingJson = jsonEncode(_strokes.map((s) => s.toMap()).toList());
-
     String? snapshotPath;
     final boundary = _previewKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
     if (boundary != null) {
       final image = await boundary.toImage(pixelRatio: 3.0);
       final byteData = await image.toByteData(format: ImageByteFormat.png);
       if (byteData != null) {
-        final pngBytes = byteData.buffer.asUint8List();
-        snapshotPath = await _img.savePngFromBytes(pngBytes);
+        snapshotPath = await _img.savePngFromBytes(byteData.buffer.asUint8List());
       }
     }
 
@@ -98,22 +100,28 @@ class _AddEditCardScreenState extends State<AddEditCardScreen> {
       position: widget.card?.position ?? -1,
     );
 
-    if (widget.card != null) {
-      await _db.updateCard(newCard);
-    } else {
-      await _db.insertCard(newCard);
-    }
-
+    if (widget.card != null) await _db.updateCard(newCard);
+    else await _db.insertCard(newCard);
     if (mounted) Navigator.pop(context, true);
   }
+
   @override
   Widget build(BuildContext c) {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.card != null ? 'Editar Card' : 'Novo Card'),
         actions: [
-          IconButton(icon: Icon(_isDrawing ? Icons.close : Icons.draw), onPressed: _toggleDrawing),
-          TextButton(onPressed: _saveCard, child: Text('Salvar')),
+          IconButton(
+            icon: const Icon(Icons.image),
+            tooltip: 'Inserir Imagem',
+            onPressed: _insertImageTag,
+          ),
+          IconButton(
+            icon: Icon(_isDrawing ? Icons.close : Icons.draw),
+            tooltip: 'Modo Desenho',
+            onPressed: _toggleDrawing,
+          ),
+          TextButton(onPressed: _saveCard, child: const Text('Salvar')),
         ],
       ),
       body: GestureDetector(
@@ -127,40 +135,67 @@ class _AddEditCardScreenState extends State<AddEditCardScreen> {
               Column(
                 children: [
                   Padding(
-                    padding: EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(16),
                     child: TextField(
                       controller: _titleController,
-                      decoration: InputDecoration(labelText: 'Título'),
+                      decoration: const InputDecoration(labelText: 'Título'),
                     ),
                   ),
                   Expanded(
                     child: Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16),
-                      child: TextField(
-                        controller: _contentController,
-                        maxLines: null,
-                        expands: true,
-                        decoration: InputDecoration(labelText: 'Conteúdo'),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            TextField(
+                              controller: _contentController,
+                              maxLines: null,
+                              decoration: const InputDecoration(labelText: 'Conteúdo'),
+                            ),
+                            const SizedBox(height: 16),
+                            ..._buildPreviewImages(_contentController.text),
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ],
               ),
-              Positioned.fill(
-                child: IgnorePointer(
-                  ignoring: !_isDrawing,
+              if (_isDrawing)
+                Positioned.fill(
                   child: CustomPaint(
                     painter: _DrawingPainter(_strokes, _currentStroke),
                   ),
                 ),
-              ),
             ],
           ),
         ),
       ),
-
     );
   }
+
+  List<Widget> _buildPreviewImages(String text) {
+    final matchIter = RegExp(r'\[IMAGE:(.*?)\]').allMatches(text);
+    return matchIter.map((m) {
+      final path = m.group(1)!;
+      if (File(path).existsSync()) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Image.file(File(path), width: double.infinity, fit: BoxFit.contain),
+        );
+      }
+      return const SizedBox();
+    }).toList();
+  }
+}
+
+class Stroke {
+  final List<Offset> points;
+  Stroke(this.points);
+  Map<String, dynamic> toMap() => {'points': points.map((p) => {'x': p.dx, 'y': p.dy}).toList()};
+  factory Stroke.fromMap(Map<String, dynamic> m) =>
+      Stroke((m['points'] as List).map((p) => Offset(p['x'], p['y'])).toList());
 }
 
 class _DrawingPainter extends CustomPainter {
@@ -175,17 +210,16 @@ class _DrawingPainter extends CustomPainter {
       ..strokeWidth = 3
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
-
     for (var s in strokes) {
-      _drawStroke(c, p, s.points);
+      _draw(c, p, s.points);
     }
-    _drawStroke(c, p, current);
+    _draw(c, p, current);
   }
 
-  void _drawStroke(Canvas c, Paint p, List<Offset> pts) {
+  void _draw(Canvas c, Paint p, List<Offset> pts) {
     if (pts.length < 2) return;
-    for (int i = 0; i < pts.length - 1; i++) {
-      c.drawLine(pts[i], pts[i+1], p);
+    for (var i = 0; i < pts.length - 1; i++) {
+      c.drawLine(pts[i], pts[i + 1], p);
     }
   }
 
