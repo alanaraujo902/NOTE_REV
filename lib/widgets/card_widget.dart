@@ -21,33 +21,44 @@ class CardWidget extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Imagem principal com scroll e zoom
+            // Imagem principal com scroll e zoom + Desenho
             Expanded(
-              child: Column(
+              child: Stack(
+                fit: StackFit.expand,
                 children: [
-                  card.imagePath != null
-                      ? ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: InteractiveViewer(
-                      panEnabled: true,
-                      minScale: 0.5,
-                      maxScale: 4.0,
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.vertical,
-                        child: Image.file(
-                          File(card.imagePath!),
-                          fit: BoxFit.fitWidth,
-                          width: double.infinity,
-                          errorBuilder: (_, __, ___) => const Center(
-                            child: Text("Erro ao carregar imagem"),
+                  // Conteúdo original (imagem e texto)
+                  Column(
+                    children: [
+                      card.imagePath != null
+                          ? ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: InteractiveViewer(
+                          panEnabled: true,
+                          minScale: 0.5,
+                          maxScale: 4.0,
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.vertical,
+                            child: Image.file(
+                              File(card.imagePath!),
+                              fit: BoxFit.fitWidth,
+                              width: double.infinity,
+                              errorBuilder: (_, __, ___) => const Center(
+                                child: Text("Erro ao carregar imagem"),
+                              ),
+                            ),
                           ),
                         ),
-                      ),
+                      )
+                          : const Center(child: Text("Sem imagem gerada")),
+                      const SizedBox(height: 16),
+                      ..._buildRichContent(card.content),
+                    ],
+                  ),
+                  // Camada de Desenho (sobrepõe o conteúdo acima)
+                  if (card.drawingPath != null && card.drawingPath != '[]')
+                    Positioned.fill(
+                      child: DrawingWidget(drawingJson: card.drawingPath!),
                     ),
-                  )
-                      : const Center(child: Text("Sem imagem gerada")),
-                  const SizedBox(height: 16),
-                  ..._buildRichContent(card.content),
                 ],
               ),
             ),

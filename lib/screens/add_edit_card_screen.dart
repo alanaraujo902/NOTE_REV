@@ -128,11 +128,13 @@ class _AddEditCardScreenState extends State<AddEditCardScreen> {
         onPanStart: _onPanStart,
         onPanUpdate: _onPanUpdate,
         onPanEnd: _onPanEnd,
-        child: RepaintBoundary(
-          key: _previewKey,
-          child: Stack(
-            children: [
-              Column(
+// ...
+        child: Stack( // O Stack continua como widget pai
+          children: [
+            // Camada de Conteúdo (TextFields, etc.). Permanece igual.
+            RepaintBoundary(
+              key: _previewKey,
+              child: Column(
                 children: [
                   Padding(
                     padding: const EdgeInsets.all(16),
@@ -162,15 +164,19 @@ class _AddEditCardScreenState extends State<AddEditCardScreen> {
                   ),
                 ],
               ),
-              if (_isDrawing)
-                Positioned.fill(
-                  child: CustomPaint(
-                    painter: _DrawingPainter(_strokes, _currentStroke),
-                  ),
+            ),
+            // Camada de Desenho, agora envolvida com IgnorePointer
+            IgnorePointer(
+              ignoring: !_isDrawing, // <-- A MÁGICA ACONTECE AQUI!
+              child: Positioned.fill(
+                child: CustomPaint(
+                  painter: _DrawingPainter(_strokes, _isDrawing ? _currentStroke : []),
                 ),
-            ],
-          ),
+              ),
+            ),
+          ],
         ),
+// ...
       ),
     );
   }
