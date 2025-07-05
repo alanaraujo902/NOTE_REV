@@ -23,6 +23,7 @@ class _AddEditCardScreenState extends State<AddEditCardScreen> {
   List<Offset> _currentStroke = [];
   final DatabaseHelper _db = DatabaseHelper();
   final ImageService _img = ImageService();
+  final GlobalKey _previewKey = GlobalKey();
 
   @override
   void initState() {
@@ -54,19 +55,20 @@ class _AddEditCardScreenState extends State<AddEditCardScreen> {
       _contentController.selection = TextSelection.collapsed(
         offset: idx + tag.length,
       );
-      setState(() {}); // Redesenhar preview
+      setState(() {});
     }
   }
 
-  final GlobalKey _previewKey = GlobalKey();
   void _onPanStart(DragStartDetails d) {
     if (!_isDrawing) return;
     setState(() => _currentStroke = [d.localPosition]);
   }
+
   void _onPanUpdate(DragUpdateDetails d) {
     if (!_isDrawing) return;
     setState(() => _currentStroke.add(d.localPosition));
   }
+
   void _onPanEnd(_) {
     if (!_isDrawing && _currentStroke.isEmpty) return;
     setState(() {
@@ -105,6 +107,39 @@ class _AddEditCardScreenState extends State<AddEditCardScreen> {
     if (mounted) Navigator.pop(context, true);
   }
 
+  List<Widget> _buildContentWidgets(String content) {
+    final widgets = <Widget>[];
+    final regex = RegExp(r'\[IMAGE:(.*?)\]');
+    final parts = content.split(regex);
+    final matches = regex.allMatches(content).toList();
+
+    for (int i = 0; i < parts.length; i++) {
+      final text = parts[i].trim();
+      if (text.isNotEmpty) {
+        widgets.add(Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Text(text, style: const TextStyle(fontSize: 16)),
+        ));
+      }
+
+      if (i < matches.length) {
+        final imagePath = matches[i].group(1);
+        if (imagePath != null && File(imagePath).existsSync()) {
+          widgets.add(Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Image.file(
+              File(imagePath),
+              width: double.infinity,
+              fit: BoxFit.contain,
+            ),
+          ));
+        }
+      }
+    }
+
+    return widgets;
+  }
+
   @override
   Widget build(BuildContext c) {
     return Scaffold(
@@ -128,10 +163,8 @@ class _AddEditCardScreenState extends State<AddEditCardScreen> {
         onPanStart: _onPanStart,
         onPanUpdate: _onPanUpdate,
         onPanEnd: _onPanEnd,
-// ...
-        child: Stack( // O Stack continua como widget pai
+        child: Stack(
           children: [
-            // Camada de Conteúdo (TextFields, etc.). Permanece igual.
             RepaintBoundary(
               key: _previewKey,
               child: Column(
@@ -150,13 +183,15 @@ class _AddEditCardScreenState extends State<AddEditCardScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            TextField(
-                              controller: _contentController,
-                              maxLines: null,
-                              decoration: const InputDecoration(labelText: 'Conteúdo'),
-                            ),
-                            const SizedBox(height: 16),
-                            ..._buildPreviewImages(_contentController.text),
+                            if (_isDrawing || !_contentController.text.contains('[IMAGE:'))
+                              TextField(
+                                controller: _contentController,
+                                maxLines: null,
+                                decoration: const InputDecoration(labelText: 'Conteúdo'),
+                                onChanged: (_) => setState(() {}),
+                              )
+                            else
+                              ..._buildContentWidgets(_contentController.text),
                           ],
                         ),
                       ),
@@ -165,9 +200,8 @@ class _AddEditCardScreenState extends State<AddEditCardScreen> {
                 ],
               ),
             ),
-            // Camada de Desenho, agora envolvida com IgnorePointer
             IgnorePointer(
-              ignoring: !_isDrawing, // <-- A MÁGICA ACONTECE AQUI!
+              ignoring: !_isDrawing,
               child: Positioned.fill(
                 child: CustomPaint(
                   painter: _DrawingPainter(_strokes, _isDrawing ? _currentStroke : []),
@@ -176,30 +210,17 @@ class _AddEditCardScreenState extends State<AddEditCardScreen> {
             ),
           ],
         ),
-// ...
       ),
     );
-  }
-
-  List<Widget> _buildPreviewImages(String text) {
-    final matchIter = RegExp(r'\[IMAGE:(.*?)\]').allMatches(text);
-    return matchIter.map((m) {
-      final path = m.group(1)!;
-      if (File(path).existsSync()) {
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Image.file(File(path), width: double.infinity, fit: BoxFit.contain),
-        );
-      }
-      return const SizedBox();
-    }).toList();
   }
 }
 
 class Stroke {
   final List<Offset> points;
   Stroke(this.points);
-  Map<String, dynamic> toMap() => {'points': points.map((p) => {'x': p.dx, 'y': p.dy}).toList()};
+  Map<String, dynamic> toMap() => {
+    'points': points.map((p) => {'x': p.dx, 'y': p.dy}).toList(),
+  };
   factory Stroke.fromMap(Map<String, dynamic> m) =>
       Stroke((m['points'] as List).map((p) => Offset(p['x'], p['y'])).toList());
 }
