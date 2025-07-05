@@ -1,0 +1,2 @@
+C:/projetos/card_deck_app/android/app/.cxx/Debug/23t2f1d1/x86_64/CMakeFiles/edit_cache.dir
+C:/projetos/card_deck_app/android/app/.cxx/Debug/23t2f1d1/x86_64/CMakeFiles/rebuild_cache.dir

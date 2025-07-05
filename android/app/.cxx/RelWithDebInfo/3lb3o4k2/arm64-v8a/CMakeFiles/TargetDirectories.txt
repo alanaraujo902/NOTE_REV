@@ -1,0 +1,2 @@
+C:/projetos/card_deck_app/android/app/.cxx/RelWithDebInfo/3lb3o4k2/arm64-v8a/CMakeFiles/edit_cache.dir
+C:/projetos/card_deck_app/android/app/.cxx/RelWithDebInfo/3lb3o4k2/arm64-v8a/CMakeFiles/rebuild_cache.dir
