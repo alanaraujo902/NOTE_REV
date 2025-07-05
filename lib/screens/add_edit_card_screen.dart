@@ -179,24 +179,34 @@ class _AddEditCardScreenState extends State<AddEditCardScreen> {
                   Expanded(
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: SingleChildScrollView(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (_isDrawing || !_contentController.text.contains('[IMAGE:'))
-                              TextField(
-                                controller: _contentController,
-                                maxLines: null,
-                                decoration: const InputDecoration(labelText: 'Conteúdo'),
-                                onChanged: (_) => setState(() {}),
-                              )
-                            else
-                              ..._buildContentWidgets(_contentController.text),
-                          ],
-                        ),
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          return SingleChildScrollView(
+                            child: ConstrainedBox(
+                              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                              child: IntrinsicHeight(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    if (_isDrawing || !_contentController.text.contains('[IMAGE:'))
+                                      TextField(
+                                        controller: _contentController,
+                                        maxLines: null,
+                                        decoration: const InputDecoration(labelText: 'Conteúdo'),
+                                        onChanged: (_) => setState(() {}),
+                                      )
+                                    else
+                                      ..._buildContentWidgets(_contentController.text),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        },
                       ),
                     ),
                   ),
+
                 ],
               ),
             ),
