@@ -3,7 +3,8 @@ import 'dart:io';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path_provider/path_provider.dart';
-import '../models/card_model.dart';
+import '../models/deck.dart';
+import '../models/card.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
@@ -20,7 +21,7 @@ class DatabaseHelper {
 
   Future<Database> _initDatabase() async {
     Directory documentsDirectory = await getApplicationDocumentsDirectory();
-    String path = join(documentsDirectory.path, 'card_deck.db');
+    String path = join(documentsDirectory.path, 'card_deck_app.db');
     
     return await openDatabase(
       path,
@@ -30,49 +31,107 @@ class DatabaseHelper {
   }
 
   Future<void> _onCreate(Database db, int version) async {
+    // Criar tabela de baralhos
+    await db.execute('''
+      CREATE TABLE decks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    ''');
+
+    // Criar tabela de cartões
     await db.execute('''
       CREATE TABLE cards (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         title TEXT NOT NULL,
         content TEXT NOT NULL,
-        imagePath TEXT,
-        drawingPath TEXT,
-        createdAt INTEGER NOT NULL,
-        lastReviewed INTEGER NOT NULL,
-        reviewCount INTEGER DEFAULT 0,
-        position INTEGER NOT NULL
+        deck_id INTEGER NOT NULL,
+        image_path TEXT,
+        audio_path TEXT,
+        drawing_path TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        last_viewed INTEGER,
+        view_count INTEGER DEFAULT 0,
+        FOREIGN KEY (deck_id) REFERENCES decks (id) ON DELETE CASCADE
       )
     ''');
-  }
 
-  // Insert a new card
-  Future<int> insertCard(CardModel card) async {
-    final db = await database;
-    int position = card.position;
-    if (position == -1) {
-      final List<Map<String, dynamic>> result = await db.rawQuery(
-          'SELECT MAX(position) as maxPosition FROM cards'
-      );
-      position = (result.first['maxPosition'] ?? -1) + 1;
-    }
-    final cardWithPosition = card.copyWith(position: position);
-    return await db.insert('cards', cardWithPosition.toMap());
-  }
-
-  // Get all cards ordered by position
-  Future<List<CardModel>> getAllCards() async {
-    final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'cards',
-      orderBy: 'position ASC',
-    );
-
-    return List.generate(maps.length, (i) {
-      return CardModel.fromMap(maps[i]);
+    // Criar baralho padrão
+    await db.insert('decks', {
+      'title': 'Baralho sem título',
+      'created_at': DateTime.now().millisecondsSinceEpoch,
+      'updated_at': DateTime.now().millisecondsSinceEpoch,
     });
   }
 
-  // Get card by ID
+  // OPERAÇÕES COM BARALHOS
+
+  Future<int> insertDeck(Deck deck) async {
+    final db = await database;
+    return await db.insert('decks', deck.toMap());
+  }
+
+  Future<List<Deck>> getAllDecks() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'decks',
+      orderBy: 'updated_at DESC',
+    );
+    return List.generate(maps.length, (i) => Deck.fromMap(maps[i]));
+  }
+
+  Future<Deck?> getDeckById(int id) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'decks',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    if (maps.isNotEmpty) {
+      return Deck.fromMap(maps.first);
+    }
+    return null;
+  }
+
+  Future<int> updateDeck(Deck deck) async {
+    final db = await database;
+    return await db.update(
+      'decks',
+      deck.toMap(),
+      where: 'id = ?',
+      whereArgs: [deck.id],
+    );
+  }
+
+  Future<int> deleteDeck(int id) async {
+    final db = await database;
+    // Primeiro deletar todos os cartões do baralho
+    await db.delete('cards', where: 'deck_id = ?', whereArgs: [id]);
+    // Depois deletar o baralho
+    return await db.delete('decks', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // OPERAÇÕES COM CARTÕES
+
+  Future<int> insertCard(CardModel card) async {
+    final db = await database;
+    return await db.insert('cards', card.toMap());
+  }
+
+  Future<List<CardModel>> getCardsByDeckId(int deckId) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'cards',
+      where: 'deck_id = ?',
+      whereArgs: [deckId],
+      orderBy: 'last_viewed ASC, created_at ASC', // Cartões menos visualizados primeiro
+    );
+    return List.generate(maps.length, (i) => CardModel.fromMap(maps[i]));
+  }
+
   Future<CardModel?> getCardById(int id) async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(
@@ -80,14 +139,12 @@ class DatabaseHelper {
       where: 'id = ?',
       whereArgs: [id],
     );
-
     if (maps.isNotEmpty) {
       return CardModel.fromMap(maps.first);
     }
     return null;
   }
 
-  // Update a card
   Future<int> updateCard(CardModel card) async {
     final db = await database;
     return await db.update(
@@ -98,85 +155,56 @@ class DatabaseHelper {
     );
   }
 
-  // Delete a card
   Future<int> deleteCard(int id) async {
     final db = await database;
-    
-    // Get the card to be deleted to know its position
-    final cardToDelete = await getCardById(id);
-    if (cardToDelete == null) return 0;
-    
-    // Delete the card
-    final result = await db.delete(
-      'cards',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-    
-    // Update positions of cards that come after the deleted card
-    await db.rawUpdate(
-      'UPDATE cards SET position = position - 1 WHERE position > ?',
-      [cardToDelete.position],
-    );
-    
-    return result;
+    return await db.delete('cards', where: 'id = ?', whereArgs: [id]);
   }
 
-  // Mark card as reviewed (move to end of queue)
-  Future<void> markCardAsReviewed(int cardId) async {
-    final db = await database;
-    
-    // Get the card
-    final card = await getCardById(cardId);
-    if (card == null) return;
-    
-    // Get the maximum position
-    final List<Map<String, dynamic>> result = await db.rawQuery(
-      'SELECT MAX(position) as maxPosition FROM cards'
-    );
-    int maxPosition = result.first['maxPosition'] ?? 0;
-    
-    // Update all cards that come after this card (decrease their position by 1)
-    await db.rawUpdate(
-      'UPDATE cards SET position = position - 1 WHERE position > ?',
-      [card.position],
-    );
-    
-    // Update the reviewed card
-    final updatedCard = card.copyWith(
-      position: maxPosition,
-      lastReviewed: DateTime.now(),
-      reviewCount: card.reviewCount + 1,
-    );
-    
-    await updateCard(updatedCard);
-  }
-
-  // Get the next card to review (first in queue)
-  Future<CardModel?> getNextCard() async {
+  // Obter próximo cartão para visualização (o que faz mais tempo que não foi visto)
+  Future<CardModel?> getNextCardToView(int deckId) async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(
       'cards',
-      orderBy: 'position ASC',
+      where: 'deck_id = ?',
+      whereArgs: [deckId],
+      orderBy: 'last_viewed ASC, created_at ASC',
       limit: 1,
     );
-
     if (maps.isNotEmpty) {
       return CardModel.fromMap(maps.first);
     }
     return null;
   }
 
-  // Get total number of cards
-  Future<int> getCardCount() async {
+  // Contar cartões em um baralho
+  Future<int> getCardCountByDeckId(int deckId) async {
     final db = await database;
-    final List<Map<String, dynamic>> result = await db.rawQuery(
-      'SELECT COUNT(*) as count FROM cards'
+    final result = await db.rawQuery(
+      'SELECT COUNT(*) as count FROM cards WHERE deck_id = ?',
+      [deckId],
     );
-    return result.first['count'] ?? 0;
+    return result.first['count'] as int;
   }
 
-  // Close database
+  // Obter baralho padrão
+  Future<Deck> getDefaultDeck() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'decks',
+      where: 'title = ?',
+      whereArgs: ['Baralho sem título'],
+      limit: 1,
+    );
+    if (maps.isNotEmpty) {
+      return Deck.fromMap(maps.first);
+    }
+    // Se não existir, criar um novo
+    final defaultDeck = Deck.create('Baralho sem título');
+    final id = await insertDeck(defaultDeck);
+    return defaultDeck.copyWith(id: id);
+  }
+
+  // Fechar banco de dados
   Future<void> close() async {
     final db = await database;
     db.close();
