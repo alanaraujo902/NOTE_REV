@@ -112,11 +112,11 @@ class _DrawingCanvasState extends State<DrawingCanvas> {
           //_buildColorButton(Colors.orange),
           //_buildColorButton(Colors.purple),
 
-          const SizedBox(width: 1),
+          const SizedBox(width: 16),
 
           // Seletor de espessura
           const Text('Espessura:'),
-          const SizedBox(width: 1),
+          const SizedBox(width: 8),
           SizedBox(
             width: 100,
             child: Slider(
@@ -221,7 +221,7 @@ class _DrawingCanvasState extends State<DrawingCanvas> {
   Future<void> _saveDrawing() async {
     try {
       final RenderRepaintBoundary boundary =
-          _canvasKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
+      _canvasKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
       final ui.Image image = await boundary.toImage(pixelRatio: 2.0);
       final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
 
