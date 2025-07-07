@@ -56,7 +56,7 @@ class _DrawingCanvasState extends State<DrawingCanvas> {
       children: [
         // Barra de ferramentas de desenho
         if (widget.isDrawingMode) _buildDrawingToolbar(),
-        
+
         // Canvas de desenho
         Expanded(
           child: Container(
@@ -108,15 +108,15 @@ class _DrawingCanvasState extends State<DrawingCanvas> {
           _buildColorButton(Colors.black),
           _buildColorButton(Colors.red),
           _buildColorButton(Colors.blue),
-          _buildColorButton(Colors.green),
-          _buildColorButton(Colors.orange),
-          _buildColorButton(Colors.purple),
-          
-          const SizedBox(width: 16),
-          
+          //_buildColorButton(Colors.green),
+          //_buildColorButton(Colors.orange),
+          //_buildColorButton(Colors.purple),
+
+          const SizedBox(width: 1),
+
           // Seletor de espessura
           const Text('Espessura:'),
-          const SizedBox(width: 8),
+          const SizedBox(width: 1),
           SizedBox(
             width: 100,
             child: Slider(
@@ -132,9 +132,9 @@ class _DrawingCanvasState extends State<DrawingCanvas> {
             ),
           ),
           Text('${_strokeWidth.toInt()}'),
-          
+
           const Spacer(),
-          
+
           // Botões de ação
           IconButton(
             icon: const Icon(Icons.clear),
@@ -177,7 +177,7 @@ class _DrawingCanvasState extends State<DrawingCanvas> {
   void _onPanStart(DragStartDetails details) {
     final RenderBox renderBox = _canvasKey.currentContext!.findRenderObject() as RenderBox;
     final localPosition = renderBox.globalToLocal(details.globalPosition);
-    
+
     setState(() {
       _points.add(DrawingPoint(
         offset: localPosition,
@@ -192,7 +192,7 @@ class _DrawingCanvasState extends State<DrawingCanvas> {
   void _onPanUpdate(DragUpdateDetails details) {
     final RenderBox renderBox = _canvasKey.currentContext!.findRenderObject() as RenderBox;
     final localPosition = renderBox.globalToLocal(details.globalPosition);
-    
+
     setState(() {
       _points.add(DrawingPoint(
         offset: localPosition,
@@ -220,11 +220,11 @@ class _DrawingCanvasState extends State<DrawingCanvas> {
 
   Future<void> _saveDrawing() async {
     try {
-      final RenderRepaintBoundary boundary = 
+      final RenderRepaintBoundary boundary =
           _canvasKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
       final ui.Image image = await boundary.toImage(pixelRatio: 2.0);
       final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      
+
       if (byteData != null) {
         final Uint8List pngBytes = byteData.buffer.asUint8List();
         widget.onDrawingChanged(pngBytes);
